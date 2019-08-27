@@ -5,7 +5,11 @@ Plots the output from our hydro solver and saves to file.
 import numpy as np
 import matplotlib.pyplot as plt
 
-data = np.genfromtxt("output.log", delimiter=",").T
+import sys
+
+filename = sys.argv[1]
+
+data = np.genfromtxt(filename, delimiter=",").T
 positions = np.linspace(0, 1, len(data[0]))
 
 fig, ax = plt.subplots(1, 3, figsize=(8, 3), sharex=True)
