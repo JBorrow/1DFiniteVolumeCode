@@ -2,6 +2,8 @@
  * Custom hydro solver as part of Bert's course!
  * 
  * Going to attempt to write some C, lol.
+ * 
+ * This a first order finite volume solver.
  */
 
 #include <stdio.h>
@@ -232,12 +234,11 @@ int main(int argc, char *argv[])
     struct cell *cells = malloc(NUMBER_OF_CELLS * sizeof(struct cell));
     setup_all_cells(cells);
 
-    /*
-    printf("# Printing initial state of all cells:\n");
-    print_state_of_cells(cells);
-    */
+    // printf("# Printing initial state of all cells:\n");
+    // print_state_of_cells(cells);
 
     /* Now we can actually do the iteration! */
+    printf("# Running iterations. Wish me luck!\n");
     const int number_of_steps = END_TIME / TIME_STEP;
     float current_time = 0.f;
 
