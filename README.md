@@ -17,3 +17,6 @@ the second showing it with the second order code.
 
 Hopefully this code is at least somewhat well strucutured and can be used by others to learn
 more about these methods.
+
+The expected result is shown below, with the first order on top and second order on the bottom.
+![1D code](expected_result.png)
