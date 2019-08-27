@@ -12,7 +12,7 @@
 #include "riemann/riemann_exact.h"
 
 /* Constants for setting up the state of the system */
-#define NUMBER_OF_CELLS 100
+#define NUMBER_OF_CELLS 200
 #define BOX_SIZE 4.f
 #define CELL_VOLUME (BOX_SIZE / NUMBER_OF_CELLS)
 #define CELL_MOMENTUM 0.f

@@ -13,7 +13,7 @@
 #include "riemann/riemann_exact.h"
 
 /* Constants for setting up the state of the system */
-#define NUMBER_OF_CELLS 100
+#define NUMBER_OF_CELLS 200
 #define BOX_SIZE 4.f
 #define CELL_VOLUME (BOX_SIZE / NUMBER_OF_CELLS)
 #define CELL_MOMENTUM 0.f
@@ -55,6 +55,10 @@ struct cell {
   struct cell *right_neighbour;
   struct cell *left_neighbour;
 };
+
+/* Finds the minimum of two numbers, but only considering their absolute values
+ */
+float minabsf(float a, float b) { return fabsf(a) < fabsf(b) ? a : b; }
 
 /* Sets up the state of a cell given a left or right state */
 void setup_state_single_cell(struct cell *current_cell,
@@ -192,11 +196,11 @@ void step(struct cell *cells) {
 
     /* Whack 'em in */
     current_cell->density_gradient =
-        min(density_gradient_left, density_gradient_right);
+        minabsf(density_gradient_left, density_gradient_right);
     current_cell->velocity_gradient =
-        min(velocity_gradient_left, velocity_gradient_right);
+        minabsf(velocity_gradient_left, velocity_gradient_right);
     current_cell->pressure_gradient =
-        min(pressure_gradient_left, pressure_gradient_right);
+        minabsf(pressure_gradient_left, pressure_gradient_right);
   }
 
   /* We have now calculated the gradients for each of the cells, so we
