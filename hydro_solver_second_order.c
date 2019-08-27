@@ -14,7 +14,7 @@
 
 /* Constants for setting up the state of the system */
 #define NUMBER_OF_CELLS 100
-#define BOX_SIZE 2.f
+#define BOX_SIZE 4.f
 #define CELL_VOLUME (BOX_SIZE / NUMBER_OF_CELLS)
 #define CELL_MOMENTUM 0.f
 #define GAS_GAMMA 1.6666f
@@ -29,10 +29,7 @@
 
 /* Timestep */
 #define TIME_STEP 0.0001f
-#define END_TIME 0.2f
-
-/* Slope limiter parameters (cell-wide) */
-#define SLOPE_LIMITER_BETA 0.5f
+#define END_TIME 0.4f
 
 /* Structs for use in the rest of the code */
 struct cell {
@@ -148,105 +145,19 @@ void setup_all_cells(struct cell *cells) {
   convert_conserved_to_primitive_all(cells);
 }
 
-/* Do the slope limiting step based on neighbour cells */
-void slope_limit_cell(struct cell *left_cell, struct cell *cell,
-                      struct cell *right_cell) {
-
-  /* Limit density */
-  const float density_max =
-      max(left_cell->density, right_cell->density) - cell->density;
-  const float density_min =
-      min(left_cell->density, right_cell->density) - cell->density;
-  const float density_gradient_dx = cell->density_gradient * CELL_VOLUME * 0.5f;
-  const float density_pred_max =
-      max(cell->density + density_gradient_dx,
-          cell->density_gradient - density_gradient_dx) -
-      cell->density;
-  const float density_pred_min =
-      min(cell->density + density_gradient_dx,
-          cell->density_gradient - density_gradient_dx) -
-      cell->density;
-
-  const float density_max_ratio =
-      density_pred_max > 0.f ? density_max / density_pred_max : FLT_MAX;
-  const float density_min_ratio =
-      density_pred_min > 0.f ? density_min / density_pred_min : FLT_MAX;
-
-  const float alpha_density =
-      min(1.f, SLOPE_LIMITER_BETA * min(density_max_ratio, density_min_ratio));
-
-  /* Now we can _actually_ limit our cell */
-  cell->density_gradient *= alpha_density;
-
-  /* Limit velocity */
-  const float velocity_max =
-      max(left_cell->velocity, right_cell->velocity) - cell->velocity;
-  const float velocity_min =
-      min(left_cell->velocity, right_cell->velocity) - cell->velocity;
-  const float velocity_gradient_dx =
-      cell->velocity_gradient * CELL_VOLUME * 0.5f;
-  const float velocity_pred_max =
-      max(cell->velocity + velocity_gradient_dx,
-          cell->velocity_gradient - velocity_gradient_dx) -
-      cell->velocity;
-  const float velocity_pred_min =
-      min(cell->velocity + velocity_gradient_dx,
-          cell->velocity_gradient - velocity_gradient_dx) -
-      cell->velocity;
-
-  const float velocity_max_ratio =
-      velocity_pred_max > 0.f ? velocity_max / velocity_pred_max : FLT_MAX;
-  const float velocity_min_ratio =
-      velocity_pred_min > 0.f ? velocity_min / velocity_pred_min : FLT_MAX;
-
-  const float alpha_velocity = min(
-      1.f, SLOPE_LIMITER_BETA * min(velocity_max_ratio, velocity_min_ratio));
-
-  /* Now we can _actually_ limit our cell */
-  cell->velocity_gradient *= alpha_velocity;
-
-  /* Limit pressure */
-  const float pressure_max =
-      max(left_cell->pressure, right_cell->pressure) - cell->pressure;
-  const float pressure_min =
-      min(left_cell->pressure, right_cell->pressure) - cell->pressure;
-  const float pressure_gradient_dx =
-      cell->pressure_gradient * CELL_VOLUME * 0.5f;
-  const float pressure_pred_max =
-      max(cell->pressure + pressure_gradient_dx,
-          cell->pressure_gradient - pressure_gradient_dx) -
-      cell->pressure;
-  const float pressure_pred_min =
-      min(cell->pressure + pressure_gradient_dx,
-          cell->pressure_gradient - pressure_gradient_dx) -
-      cell->pressure;
-
-  const float pressure_max_ratio =
-      pressure_pred_max > 0.f ? pressure_max / pressure_pred_max : FLT_MAX;
-  const float pressure_min_ratio =
-      pressure_pred_min > 0.f ? pressure_min / pressure_pred_min : FLT_MAX;
-
-  const float alpha_pressure = min(
-      1.f, SLOPE_LIMITER_BETA * min(pressure_max_ratio, pressure_min_ratio));
-
-  /* Now we can _actually_ limit our cell */
-  cell->pressure_gradient *= alpha_pressure;
-}
-
 /* Generates a drifted state based on the time-step and cell gradients */
 void generate_drifted_state(struct cell *cell, float *state) {
-  state[0] = cell->density - 0.5f * TIME_STEP *
-                                 (cell->density * cell->velocity_gradient +
-                                  cell->velocity * cell->density_gradient);
-  state[1] = cell->velocity - 0.5f * TIME_STEP *
-                                  (cell->velocity * cell->velocity_gradient +
-                                   cell->pressure_gradient / cell->density);
+  state[0] -= 0.5f * TIME_STEP *
+              (cell->density * cell->velocity_gradient +
+               cell->velocity * cell->density_gradient);
+  state[1] -= 0.5f * TIME_STEP *
+              (cell->velocity * cell->velocity_gradient +
+               cell->pressure_gradient / cell->density);
   state[2] = 0.f; /* 1D */
   state[3] = 0.f; /* 1D */
-  state[4] = cell->pressure -
-             0.5f * TIME_STEP *
-                 (GAS_GAMMA * cell->pressure * cell->velocity_gradient +
-                  cell->velocity * cell->pressure_gradient);
+  state[4] -= 0.5f * TIME_STEP *
+              (GAS_GAMMA * cell->pressure * cell->velocity_gradient +
+               cell->velocity * cell->pressure_gradient);
 }
 
 /* Perform one full hydro step on all cells */
@@ -264,26 +175,28 @@ void step(struct cell *cells) {
 
     /* Compute gradients */
     const float grad_fac = 0.5 / CELL_VOLUME; /* Will change in ND! */
-    const float density_gradient = grad_fac * (right_neighbour_cell->density -
-                                               left_neighbour_cell->density);
-    const float velocity_gradient = grad_fac * (right_neighbour_cell->velocity -
-                                                left_neighbour_cell->velocity);
-    const float pressure_gradient = grad_fac * (right_neighbour_cell->pressure -
-                                                left_neighbour_cell->velocity);
+
+    const float density_gradient_left =
+        grad_fac * (current_cell->density - left_neighbour_cell->density);
+    const float velocity_gradient_left =
+        grad_fac * (current_cell->velocity - left_neighbour_cell->velocity);
+    const float pressure_gradient_left =
+        grad_fac * (current_cell->pressure - left_neighbour_cell->pressure);
+
+    const float density_gradient_right =
+        grad_fac * (right_neighbour_cell->density - current_cell->density);
+    const float velocity_gradient_right =
+        grad_fac * (right_neighbour_cell->velocity - current_cell->velocity);
+    const float pressure_gradient_right =
+        grad_fac * (right_neighbour_cell->pressure - current_cell->pressure);
 
     /* Whack 'em in */
-    current_cell->density_gradient = density_gradient;
-    current_cell->velocity_gradient = velocity_gradient;
-    current_cell->pressure_gradient = pressure_gradient;
-  }
-
-  /* Now perform the slope limiting step */
-  for (int i = 0; i < NUMBER_OF_CELLS; i++) {
-    struct cell *current_cell = &cells[i];
-    struct cell *right_neighbour_cell = cells[i].right_neighbour;
-    struct cell *left_neighbour_cell = cells[i].left_neighbour;
-
-    slope_limit_cell(left_neighbour_cell, current_cell, right_neighbour_cell);
+    current_cell->density_gradient =
+        min(density_gradient_left, density_gradient_right);
+    current_cell->velocity_gradient =
+        min(velocity_gradient_left, velocity_gradient_right);
+    current_cell->pressure_gradient =
+        min(pressure_gradient_left, pressure_gradient_right);
   }
 
   /* We have now calculated the gradients for each of the cells, so we
@@ -292,15 +205,38 @@ void step(struct cell *cells) {
   for (int i = 0; i < NUMBER_OF_CELLS; i++) {
     struct cell *current_cell = &cells[i];
     /* Always go from left to right */
-    struct cell *neighbour_cell = cells[i].right_neighbour;
+    struct cell *left_neighbour_cell = cells[i].left_neighbour;
+    struct cell *right_neighbour_cell = cells[i].right_neighbour;
 
-    /* Predict half step forward */
+    /* Predict half step forward and do the reconstruction. Here the states
+     * are five floats, with density, v[3], and then pressure. */
 
     float left_state[5];
+    /* First reconstruct */
+    left_state[0] = current_cell->density +
+                    0.5f * CELL_VOLUME * current_cell->density_gradient;
+    left_state[1] = current_cell->velocity +
+                    0.5f * CELL_VOLUME * current_cell->velocity_gradient;
+    left_state[4] = current_cell->pressure +
+                    0.5f * CELL_VOLUME * current_cell->pressure_gradient;
+
+    /* Now drift using the value of the gradient */
     generate_drifted_state(current_cell, &left_state[0]);
 
     float right_state[5];
-    generate_drifted_state(neighbour_cell, &right_state[0]);
+    /* First reconstruct */
+    right_state[0] =
+        right_neighbour_cell->density -
+        0.5f * CELL_VOLUME * right_neighbour_cell->density_gradient;
+    right_state[1] =
+        right_neighbour_cell->velocity -
+        0.5f * CELL_VOLUME * right_neighbour_cell->velocity_gradient;
+    right_state[4] =
+        right_neighbour_cell->pressure -
+        0.5f * CELL_VOLUME * right_neighbour_cell->pressure_gradient;
+
+    /* Now drift using the value of the gradient */
+    generate_drifted_state(right_neighbour_cell, &right_state[0]);
 
     float output_state[5];
 
@@ -334,9 +270,9 @@ void step(struct cell *cells) {
     current_cell->energy -= flux_energy * TIME_STEP;
 
     /* In one ear and right out the other */
-    neighbour_cell->mass += flux_mass * TIME_STEP;
-    neighbour_cell->momentum += flux_momentum * TIME_STEP;
-    neighbour_cell->energy += flux_energy * TIME_STEP;
+    right_neighbour_cell->mass += flux_mass * TIME_STEP;
+    right_neighbour_cell->momentum += flux_momentum * TIME_STEP;
+    right_neighbour_cell->energy += flux_energy * TIME_STEP;
 
     /* We're done! */
   }
