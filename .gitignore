@@ -2,7 +2,7 @@ hydro_solver
 hydro_solver_second_order
 
 output.log
-output.pdf
+output_first_order.pdf
 
 output_second_order.log
 output_second_order.pdf
